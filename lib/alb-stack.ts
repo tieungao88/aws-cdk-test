@@ -1,27 +1,35 @@
-import { Duration, Stack, StackProps } from 'aws-cdk-lib';
-import * as ec2 from "aws-cdk-lib/aws-ec2";
-import * as elb from "aws-cdk-lib/aws-elasticloadbalancingv2";
+import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
+import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
+import * as ec2 from 'aws-cdk-lib/aws-ec2';
 
-export class ALBStack extends Stack {
-    constructor(scope: Construct, id: string, props?: StackProps) {
-        super(scope, id, props);
+// Định nghĩa kiểu props mở rộng từ StackProps
+interface AlbStackProps extends cdk.StackProps {
+  vpcId: string;
+  subnetIds: string[];
+}
 
-        //  todo ...
-        // Lay thong tin bien moi truong
-        const branch = process.env.BRANCH_NAME || "dev"; // Lấy branch từ biến môi trường
-        const envConfig = this.node.tryGetContext("environments")[branch];
+export class AlbStack extends cdk.Stack {
+  constructor(scope: Construct, id: string, props: AlbStackProps) {
+    super(scope, id, props);
 
-        if (!envConfig) {
-        throw new Error(`Environment configuration for branch "${branch}" not found`);
-        }
-        const vpcId = envConfig.vpcId;
-        const subnetIds = envConfig.subnetIds;
+    // Lấy VPC từ ID
+    const vpc = ec2.Vpc.fromVpcAttributes(this, 'VPC', {
+      vpcId: props.vpcId,
+      availabilityZones: cdk.Fn.getAzs(), // Tự động lấy danh sách Availability Zones
+    });
+    console.log(vpc)
 
-        const vpc = ec2.Vpc.fromLookup(this, "ExistingVpc", { vpcId });
+    // Lấy các subnet từ danh sách ID
+    const subnets = props.subnetIds.map((subnetId, index) =>
+      ec2.Subnet.fromSubnetId(this, `Subnet${index}`, subnetId),
+    );
 
-        const subnets = subnetIds.map((subnetId: string, index: number) =>
-        ec2.Subnet.fromSubnetId(this, `Subnet${index + 1}`, subnetId)
-        );
-    }
+    // Tạo Application Load Balancer
+    new elbv2.ApplicationLoadBalancer(this, 'ALB', {
+      vpc,
+      internetFacing: false,
+      vpcSubnets: { subnets }, // Cung cấp danh sách subnet
+    });
+  }
 }
